@@ -1,5 +1,6 @@
 import { Phone, Search, Globe, ChevronDown, Menu, X } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -76,9 +77,9 @@ const Header = () => {
 
               {/* Auth Actions */}
               <div className="flex items-center gap-4">
-                <button className="text-primary-foreground/90 hover:text-primary-foreground transition-colors font-medium">
+                <Link to="/login" className="text-primary-foreground/90 hover:text-primary-foreground transition-colors font-medium">
                   تسجيل الدخول
-                </button>
+                </Link>
                 <span className="text-primary-foreground/30">|</span>
                 <button className="text-primary-foreground/90 hover:text-primary-foreground transition-colors font-medium">
                   علاقات الموردين

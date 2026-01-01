@@ -6,5 +6,15 @@
   RewriteRule ^ index.html [L]
 </IfModule>
 
+<IfModule mod_mime.c>
+  AddType application/javascript js
+  AddType text/css css
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header set X-UA-Compatible "IE=edge"
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
 
 
