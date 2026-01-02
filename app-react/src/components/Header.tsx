@@ -1,9 +1,17 @@
-import { Phone, Search, Globe, ChevronDown, Menu, X } from "lucide-react";
+import { Phone, Search, Globe, ChevronDown, Menu, X, LogOut } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { auth, logout, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
+  };
 
   const navItems = [
     { label: "عن الشركة", hasDropdown: true },
@@ -77,13 +85,31 @@ const Header = () => {
 
               {/* Auth Actions */}
               <div className="flex items-center gap-4">
-                <Link to="/login" className="text-primary-foreground/90 hover:text-primary-foreground transition-colors font-medium">
-                  تسجيل الدخول
-                </Link>
-                <span className="text-primary-foreground/30">|</span>
-                <button className="text-primary-foreground/90 hover:text-primary-foreground transition-colors font-medium">
-                  علاقات الموردين
-                </button>
+                {isAuthenticated && auth ? (
+                  <>
+                    <span className="text-primary-foreground/90 text-sm">
+                      مرحبا {auth.full_name}
+                    </span>
+                    <span className="text-primary-foreground/30">|</span>
+                    <button 
+                      onClick={handleLogout}
+                      className="text-primary-foreground/90 hover:text-primary-foreground transition-colors font-medium flex items-center gap-1"
+                    >
+                      تسجيل الخروج
+                      <LogOut className="h-4 w-4" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link to="/login" className="text-primary-foreground/90 hover:text-primary-foreground transition-colors font-medium">
+                      تسجيل الدخول
+                    </Link>
+                    <span className="text-primary-foreground/30">|</span>
+                    <button className="text-primary-foreground/90 hover:text-primary-foreground transition-colors font-medium">
+                      علاقات الموردين
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>

@@ -1,19 +1,13 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /NWCBilling/app-react/
+  
+  # Don't rewrite actual files or directories
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule ^ index.html [L]
-</IfModule>
-
-<IfModule mod_mime.c>
-  AddType application/javascript js
-  AddType text/css css
-</IfModule>
-
-<IfModule mod_headers.c>
-  Header set X-UA-Compatible "IE=edge"
-  Header set X-Content-Type-Options "nosniff"
+  
+  # Rewrite everything to index.php for React Router
+  RewriteRule ^(.*)$ index.php [L]
 </IfModule>
 
 

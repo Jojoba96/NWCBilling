@@ -32,7 +32,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $conn = $db->connect();
         
         // Query users by national_id (customers use national ID to login)
-        $query = "SELECT id, username, full_name, national_id, role FROM users WHERE national_id = ?";
+        // Also fetch account info
+        $query = "SELECT u.id, u.username, u.full_name, u.national_id, u.email, u.phone_number, u.password, u.role, 
+                         a.id as account_id, a.account_number, a.account_type
+                  FROM users u
+                  LEFT JOIN accounts a ON u.id = a.user_id
+                  WHERE u.national_id = ? AND u.role = 1";
         $stmt = $conn->prepare($query);
         $stmt->bind_param('s', $national_id);
         $stmt->execute();
@@ -41,25 +46,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result->num_rows > 0) {
             $user = $result->fetch_assoc();
             
-            // For demo: password = national_id (you can add password hashing later)
-            if ($password === $national_id) {
+            // Check password - handle NULL passwords for test accounts
+            $storedPassword = $user['password'];
+            
+            // If password is NULL or empty, allow test123 for testing
+            // Otherwise verify the password
+            $passwordValid = false;
+            if (empty($storedPassword)) {
+                $passwordValid = ($password === 'test123');
+            } else if ($password === $storedPassword) {
+                $passwordValid = true;
+            } else if (function_exists('password_verify') && password_verify($password, $storedPassword)) {
+                $passwordValid = true;
+            }
+            
+            if ($passwordValid) {
                 // Create session
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['full_name'] = $user['full_name'];
                 $_SESSION['national_id'] = $user['national_id'];
+                $_SESSION['account_id'] = $user['account_id'];
                 $_SESSION['role'] = $user['role'];
                 
                 http_response_code(200);
                 echo json_encode([
                     'success' => true,
                     'message' => 'Login successful',
-                    'user' => [
-                        'id' => $user['id'],
-                        'full_name' => $user['full_name'],
-                        'username' => $user['username'],
-                        'role' => $user['role']
-                    ]
+                    'user_id' => $user['id'],
+                    'account_id' => $user['account_id'],
+                    'account_number' => $user['account_number'],
+                    'full_name' => $user['full_name'],
+                    'email' => $user['email'],
+                    'phone_number' => $user['phone_number'],
+                    'account_type' => $user['account_type']
                 ]);
             } else {
                 http_response_code(401);
@@ -79,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         http_response_code(500);
         echo json_encode([
             'success' => false,
-            'error' => 'Server error'
+            'error' => 'Server error: ' . $e->getMessage()
         ]);
     }
 } else {

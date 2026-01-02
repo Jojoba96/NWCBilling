@@ -6,46 +6,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useAuth } from "@/context/AuthContext";
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login, isLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [nationalId, setNationalId] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setIsLoading(true);
 
-    try {
-      const response = await fetch("/NWCBilling/api/login.php", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          national_id: nationalId.trim(),
-          password: password.trim(),
-        }),
-        credentials: "include",
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Redirect to customer dashboard
-        navigate("/dashboard");
-      } else {
-        setError(data.error || "خطأ في تسجيل الدخول");
-      }
-    } catch (err) {
-      setError("حدث خطأ في الاتصال بالخادم");
-      console.error(err);
-    } finally {
-      setIsLoading(false);
+    const success = await login(nationalId.trim(), password.trim());
+    
+    if (success) {
+      // Redirect to customer dashboard
+      navigate("/dashboard");
+    } else {
+      setError("بيانات الدخول غير صحيحة");
     }
   };
 
