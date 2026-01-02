@@ -56,6 +56,122 @@ if (isset($_POST['action'])) {
         }
         exit;
     }
+    
+    elseif ($action === 'add_employee') {
+        header('Content-Type: application/json');
+        
+        // Get form data
+        $fullName = $_POST['full_name'] ?? '';
+        $email = $_POST['email'] ?? '';
+        $nationalId = $_POST['national_id'] ?? '';
+        $phone = $_POST['phone_number'] ?? '';
+        $password = $_POST['password'] ?? '';
+        
+        // Validate input
+        if (!$fullName || !$email || !$nationalId || !$phone || !$password) {
+            echo json_encode(['success' => false, 'error' => 'Missing required fields']);
+            exit;
+        }
+        
+        // Check if email or national ID already exists
+        $checkSql = "SELECT id FROM users WHERE email = ? OR national_id = ?";
+        $checkStmt = $conn->prepare($checkSql);
+        $checkStmt->bind_param('ss', $email, $nationalId);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+        
+        if ($checkResult->num_rows > 0) {
+            echo json_encode(['success' => false, 'error' => 'Email or National ID already exists']);
+            exit;
+        }
+        
+        // Generate username from full name (e.g., "Ahmed Ali" => "ahmed.ali")
+        $nameParts = explode(' ', trim($fullName));
+        $username = strtolower(implode('.', $nameParts));
+        
+        // Check if username already exists, if so add a number
+        $checkUsernameSql = "SELECT id FROM users WHERE username = ?";
+        $checkUsernameStmt = $conn->prepare($checkUsernameSql);
+        $checkUsernameStmt->bind_param('s', $username);
+        $checkUsernameStmt->execute();
+        $checkUsernameResult = $checkUsernameStmt->get_result();
+        
+        if ($checkUsernameResult->num_rows > 0) {
+            $username = $username . '_' . time();
+        }
+        
+        // Hash password
+        $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
+        
+        // Insert new employee (role = 2)
+        $insertSql = "INSERT INTO users (username, full_name, email, phone_number, national_id, password, role, created_at) 
+                     VALUES (?, ?, ?, ?, ?, ?, 2, NOW())";
+        
+        $insertStmt = $conn->prepare($insertSql);
+        
+        if (!$insertStmt) {
+            echo json_encode(['success' => false, 'error' => 'Prepare statement failed: ' . $conn->error]);
+            exit;
+        }
+        
+        $insertStmt->bind_param('ssssss', $username, $fullName, $email, $phone, $nationalId, $hashedPassword);
+        
+        if ($insertStmt->execute()) {
+            echo json_encode(['success' => true, 'message' => 'Employee added successfully', 'username' => $username]);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Failed to add employee: ' . $insertStmt->error]);
+        }
+        exit;
+    }
+    
+    elseif ($action === 'delete_employee') {
+        header('Content-Type: application/json');
+        
+        $employeeId = intval($_POST['employee_id'] ?? 0);
+        
+        if (!$employeeId) {
+            echo json_encode(['success' => false, 'error' => 'Employee ID required']);
+            exit;
+        }
+        
+        // Delete employee
+        $deleteSql = "DELETE FROM users WHERE id = ? AND role = 2";
+        $deleteStmt = $conn->prepare($deleteSql);
+        $deleteStmt->bind_param('i', $employeeId);
+        
+        if ($deleteStmt->execute()) {
+            echo json_encode(['success' => true, 'message' => 'Employee deleted successfully']);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Failed to delete employee']);
+        }
+        exit;
+    }
+    
+    elseif ($action === 'update_employee') {
+        header('Content-Type: application/json');
+        
+        $employeeId = intval($_POST['employee_id'] ?? 0);
+        $fullName = $_POST['full_name'] ?? '';
+        $email = $_POST['email'] ?? '';
+        $phone = $_POST['phone_number'] ?? '';
+        
+        if (!$employeeId || !$fullName || !$email || !$phone) {
+            echo json_encode(['success' => false, 'error' => 'Missing required fields']);
+            exit;
+        }
+        
+        // Update employee
+        $updateSql = "UPDATE users SET full_name = ?, email = ?, phone_number = ? WHERE id = ? AND role = 2";
+        $updateStmt = $conn->prepare($updateSql);
+        $updateStmt->bind_param('sssi', $fullName, $email, $phone, $employeeId);
+        
+        if ($updateStmt->execute()) {
+            echo json_encode(['success' => true, 'message' => 'Employee updated successfully']);
+        } else {
+            echo json_encode(['success' => false, 'error' => 'Failed to update employee']);
+        }
+        exit;
+    }
 }
 
 // Handle AJAX requests FIRST (before any HTML output)
@@ -136,6 +252,36 @@ if (isset($_GET['action'])) {
         }
         
         echo json_encode(['employees' => $employees]);
+        exit;
+    }
+    
+    elseif ($action === 'get_dashboard_stats') {
+        // Get pending bills count
+        $pendingBillsQuery = "SELECT COUNT(*) as count FROM bills WHERE status = 'pending_review'";
+        $pendingBillsResult = $conn->query($pendingBillsQuery);
+        $pendingBillsCount = $pendingBillsResult->fetch_assoc()['count'];
+        
+        // Get total employees count
+        $employeesQuery = "SELECT COUNT(*) as count FROM users WHERE role = 2";
+        $employeesResult = $conn->query($employeesQuery);
+        $employeesCount = $employeesResult->fetch_assoc()['count'];
+        
+        // Get approved bills count
+        $approvedBillsQuery = "SELECT COUNT(*) as count FROM bills WHERE status = 'active'";
+        $approvedBillsResult = $conn->query($approvedBillsQuery);
+        $approvedBillsCount = $approvedBillsResult->fetch_assoc()['count'];
+        
+        // Get rejected bills count
+        $rejectedBillsQuery = "SELECT COUNT(*) as count FROM bills WHERE status = 'rejected'";
+        $rejectedBillsResult = $conn->query($rejectedBillsQuery);
+        $rejectedBillsCount = $rejectedBillsResult->fetch_assoc()['count'];
+        
+        echo json_encode([
+            'pending_bills' => intval($pendingBillsCount),
+            'total_employees' => intval($employeesCount),
+            'approved_bills' => intval($approvedBillsCount),
+            'rejected_bills' => intval($rejectedBillsCount)
+        ]);
         exit;
     }
     
@@ -317,6 +463,20 @@ if (isset($_GET['action'])) {
                     .catch(error => console.error('Error loading bills:', error));
             },
 
+            loadDashboardStats() {
+                fetch('Admin.php?action=get_dashboard_stats')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data) {
+                            document.getElementById('pendingBillsCount').textContent = data.pending_bills || 0;
+                            document.getElementById('employeesCount').textContent = data.total_employees || 0;
+                            document.getElementById('approvedBillsCount').textContent = data.approved_bills || 0;
+                            document.getElementById('rejectedBillsCount').textContent = data.rejected_bills || 0;
+                        }
+                    })
+                    .catch(error => console.error('Error loading dashboard stats:', error));
+            },
+
             approveBill(billId, billElement) {
                 if (!confirm('Approve this bill?')) return;
                 
@@ -365,6 +525,118 @@ if (isset($_GET['action'])) {
                     }
                 })
                 .catch(error => alert('Error: ' + error));
+            },
+
+            submitAddEmployee(e) {
+                e.preventDefault();
+                
+                const fullName = document.getElementById('fullName').value.trim();
+                const email = document.getElementById('email').value.trim();
+                const nationalId = document.getElementById('nationalId').value.trim();
+                const phone = document.getElementById('phone').value.trim();
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+                
+                // Validation
+                if (!fullName || !email || !nationalId || !phone || !password) {
+                    alert('Please fill in all required fields');
+                    return;
+                }
+                
+                if (password !== confirmPassword) {
+                    alert('Passwords do not match');
+                    return;
+                }
+                
+                if (password.length < 6) {
+                    alert('Password must be at least 6 characters long');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('action', 'add_employee');
+                formData.append('full_name', fullName);
+                formData.append('email', email);
+                formData.append('national_id', nationalId);
+                formData.append('phone_number', phone);
+                formData.append('password', password);
+                
+                fetch('Admin.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Employee added successfully!');
+                        app.navigate('manage-employee');
+                        app.loadEmployees();
+                    } else {
+                        alert('Error: ' + (data.error || 'Failed to add employee'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error adding employee: ' + error);
+                });
+            },
+
+            deleteEmployee(employeeId, employeeName) {
+                if (!confirm(`Are you sure you want to delete employee "${employeeName}"?`)) {
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('action', 'delete_employee');
+                formData.append('employee_id', employeeId);
+                
+                fetch('Admin.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Employee deleted successfully!');
+                        app.loadEmployees();
+                    } else {
+                        alert('Error: ' + (data.error || 'Failed to delete employee'));
+                    }
+                })
+                .catch(error => alert('Error: ' + error));
+            },
+
+            editEmployee(employeeId, employeeName, employeeEmail, employeePhone) {
+                const fullName = prompt('Enter full name:', employeeName);
+                if (!fullName) return;
+                
+                const email = prompt('Enter email:', employeeEmail);
+                if (!email) return;
+                
+                const phone = prompt('Enter phone number:', employeePhone);
+                if (!phone) return;
+                
+                const formData = new FormData();
+                formData.append('action', 'update_employee');
+                formData.append('employee_id', employeeId);
+                formData.append('full_name', fullName);
+                formData.append('email', email);
+                formData.append('phone_number', phone);
+                
+                fetch('Admin.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Employee updated successfully!');
+                        app.loadEmployees();
+                    } else {
+                        alert('Error: ' + (data.error || 'Failed to update employee'));
+                    }
+                })
+                .catch(error => alert('Error: ' + error));
             }
         };
 
@@ -381,7 +653,7 @@ if (isset($_GET['action'])) {
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <p class="text-gray-500 text-sm dark:text-gray-400">Pending Bills</p>
-                                        <p class="text-3xl font-bold text-slate-700 dark:text-white">0</p>
+                                        <p class="text-3xl font-bold text-slate-700 dark:text-white" id="pendingBillsCount">-</p>
                                     </div>
                                     <i class="ni ni-credit-card text-4xl text-orange-500 opacity-50"></i>
                                 </div>
@@ -390,7 +662,7 @@ if (isset($_GET['action'])) {
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <p class="text-gray-500 text-sm dark:text-gray-400">Total Employees</p>
-                                        <p class="text-3xl font-bold text-slate-700 dark:text-white">0</p>
+                                        <p class="text-3xl font-bold text-slate-700 dark:text-white" id="employeesCount">-</p>
                                     </div>
                                     <i class="ni ni-single-02 text-4xl text-cyan-500 opacity-50"></i>
                                 </div>
@@ -399,7 +671,7 @@ if (isset($_GET['action'])) {
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <p class="text-gray-500 text-sm dark:text-gray-400">Approved Bills</p>
-                                        <p class="text-3xl font-bold text-slate-700 dark:text-white">0</p>
+                                        <p class="text-3xl font-bold text-slate-700 dark:text-white" id="approvedBillsCount">-</p>
                                     </div>
                                     <i class="ni ni-check-bold text-4xl text-green-500 opacity-50"></i>
                                 </div>
@@ -408,7 +680,7 @@ if (isset($_GET['action'])) {
                                 <div class="flex items-center justify-between">
                                     <div>
                                         <p class="text-gray-500 text-sm dark:text-gray-400">Rejected Bills</p>
-                                        <p class="text-3xl font-bold text-slate-700 dark:text-white">0</p>
+                                        <p class="text-3xl font-bold text-slate-700 dark:text-white" id="rejectedBillsCount">-</p>
                                     </div>
                                     <i class="ni ni-fat-remove text-4xl text-red-500 opacity-50"></i>
                                 </div>
@@ -419,6 +691,9 @@ if (isset($_GET['action'])) {
                             <p class="text-gray-600 dark:text-gray-400">Welcome to the Admin Dashboard. Use the sidebar to manage employees and review bills.</p>
                         </div>
                     `;
+                    
+                    // Load dashboard statistics
+                    app.loadDashboardStats();
                 }
             },
 
@@ -474,11 +749,82 @@ if (isset($_GET['action'])) {
                                 <td class="px-4 py-3 text-slate-700 dark:text-white">${emp.phone}</td>
                                 <td class="px-4 py-3 text-slate-700 dark:text-white">${new Date(emp.createdAt).toLocaleDateString()}</td>
                                 <td class="px-4 py-3 text-center">
-                                    <button class="text-blue-500 hover:text-blue-700 mr-3" title="Edit"><i class="ni ni-settings"></i></button>
-                                    <button class="text-red-500 hover:text-red-700" title="Delete"><i class="ni ni-fat-remove"></i></button>
+                                    <button onclick="app.editEmployee(${emp.id}, '${emp.name}', '${emp.email}', '${emp.phone}')" class="text-blue-500 hover:text-blue-700 mr-3 transition" title="Edit"><i class="ni ni-settings"></i></button>
+                                    <button onclick="app.deleteEmployee(${emp.id}, '${emp.name}')" class="text-red-500 hover:text-red-700 transition" title="Delete"><i class="ni ni-fat-remove"></i></button>
                                 </td>
                             </tr>
                         `).join('');
+                    }, 100);
+                }
+            },
+
+            'add-employee': {
+                title: 'Add New Employee',
+                breadcrumb: 'Add Employee',
+                render(container) {
+                    container.innerHTML = `
+                        <div class="bg-white rounded-xl shadow-lg dark:bg-slate-850">
+                            <div class="p-8">
+                                <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-8">Add New Employee Info</h3>
+                                
+                                <form id="addEmployeeForm" class="space-y-6">
+                                    <div class="space-y-8 pt-4 px-4">
+                                        <div>
+                                            <label class="block text-sm font-semibold text-slate-700 dark:text-white mb-4">Full Name</label>
+                                            <input type="text" id="fullName" name="full_name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition dark:bg-slate-700 dark:border-slate-600 dark:text-white placeholder-gray-400" placeholder="Enter employee name">
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-semibold text-slate-700 dark:text-white mb-4">Email</label>
+                                            <input type="email" id="email" name="email" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition dark:bg-slate-700 dark:border-slate-600 dark:text-white placeholder-gray-400" placeholder="employee@nwc.gov.sa">
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-semibold text-slate-700 dark:text-white mb-4">National ID</label>
+                                            <input type="text" id="nationalId" name="national_id" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition dark:bg-slate-700 dark:border-slate-600 dark:text-white placeholder-gray-400" placeholder="1234567890">
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-semibold text-slate-700 dark:text-white mb-4">Phone Number</label>
+                                            <input type="tel" id="phone" name="phone_number" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition dark:bg-slate-700 dark:border-slate-600 dark:text-white placeholder-gray-400" placeholder="0501234567">
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-semibold text-slate-700 dark:text-white mb-4">Password</label>
+                                            <input type="password" id="password" name="password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition dark:bg-slate-700 dark:border-slate-600 dark:text-white placeholder-gray-400" placeholder="Enter password">
+                                        </div>
+                                        
+                                        <div>
+                                            <label class="block text-sm font-semibold text-slate-700 dark:text-white mb-4">Confirm Password</label>
+                                            <input type="password" id="confirmPassword" name="confirm_password" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition dark:bg-slate-700 dark:border-slate-600 dark:text-white placeholder-gray-400" placeholder="Confirm password">
+                                        </div>
+                                    </div>
+                                </form>
+                                </form>
+                            </div>
+                            
+                            <div class="bg-blue-50 dark:bg-blue-900/20 border-t border-gray-200 dark:border-slate-700 px-8 py-4">
+                                <p class="text-sm text-blue-800 dark:text-blue-300">
+                                    <strong>Role:</strong> This employee will be created as an Employee (role=2) and can manage bills
+                                </p>
+                            </div>
+                            
+                            <div class="px-8 py-6 bg-gray-50 dark:bg-slate-900/50 border-t border-gray-200 dark:border-slate-700 rounded-b-xl flex gap-3">
+                                <button type="submit" form="addEmployeeForm" class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2.5 px-6 rounded-lg transition flex items-center gap-2 shadow-md">
+                                    <i class="ni ni-fat-add"></i>Add Employee
+                                </button>
+                                <button type="button" onclick="app.navigate('manage-employee')" class="bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold py-2.5 px-6 rounded-lg transition dark:bg-slate-600 dark:text-white dark:hover:bg-slate-500">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    setTimeout(() => {
+                        const form = document.getElementById('addEmployeeForm');
+                        if (form) {
+                            form.addEventListener('submit', app.submitAddEmployee);
+                        }
                     }, 100);
                 }
             },
