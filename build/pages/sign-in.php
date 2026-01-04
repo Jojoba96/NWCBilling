@@ -102,12 +102,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </form>
                   </div>
                   <div class="border-black/12.5 rounded-b-2xl border-t-0 border-solid p-6 text-center pt-0 px-1 sm:px-6">
-                    <div class="mb-4 p-3 bg-blue-50 rounded-lg text-sm">
-                      <p class="font-bold mb-2">Demo Credentials (Employee/Admin Only):</p>
-                      <p class="text-xs mb-1"><strong>Employee:</strong> emp_saleh / emp_saleh</p>
-                      <p class="text-xs mb-1"><strong>Admin:</strong> admin_user / admin_user</p>
-                      <p class="text-xs text-red-600"><strong>Note:</strong> Customers cannot login here. Use customer portal instead.</p>
-                    </div>
                   </div>
                 </div>
               </div>
