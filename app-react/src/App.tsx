@@ -2,11 +2,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Customer from "./pages/Customer";
 import NotFound from "./pages/NotFound";
+import EmployeeDashboard from "./pages/EmployeeDashboard";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,10 @@ const AppRoutes = () => (
       path="/dashboard" 
       element={<ProtectedRoute element={<Customer />} />} 
     />
+    <Route 
+      path="/employee" 
+      element={<EmployeeDashboard />} 
+    />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );
@@ -35,9 +40,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter basename="/NWCBilling/app-react">
+        <HashRouter>
           <AppRoutes />
-        </BrowserRouter>
+        </HashRouter>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

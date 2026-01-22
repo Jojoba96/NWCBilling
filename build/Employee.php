@@ -1465,6 +1465,12 @@ if ($action) {
                         if (bill.segments && bill.segments.length > 0) {
                             bill.segments.forEach((segment, index) => {
                                 const row = document.createElement('tr');
+                                row.setAttribute('data-segment', '1');
+                                row.setAttribute('data-name', segment.name);
+                                row.setAttribute('data-consumption', segment.consumption);
+                                row.setAttribute('data-amount', segment.amount);
+                                row.setAttribute('data-status', segment.status);
+                                row.setAttribute('data-remarks', segment.remarks || '');
                                 row.style.borderBottom = '1px solid #e5e7eb';
                                 const statusColor = segment.status === 'draft' ? '#FCD34D' : 
                                                   segment.status === 'pending_review' ? '#60A5FA' : 
@@ -1749,6 +1755,46 @@ if ($action) {
                     });
             },
 
+            addBillSegmentFromForm() {
+                // Validate that customer info is provided
+                const accountId = document.getElementById('billAccountId').value;
+                const customerName = document.getElementById('billCustomerName') ? document.getElementById('billCustomerName').value : '';
+                
+                if (!accountId && !customerName) {
+                    alert('Please enter Account ID or Customer Name before adding segments');
+                    return;
+                }
+                
+                // Get form values
+                const name = document.getElementById('formSegmentName').value;
+                const consumption = document.getElementById('formSegmentConsumption').value;
+                const amount = document.getElementById('formSegmentAmount').value;
+                const status = document.getElementById('formSegmentStatus').value;
+                const remarks = document.getElementById('formSegmentRemarks').value;
+                
+                // Validate
+                if (!name) {
+                    alert('Please select a segment type');
+                    return;
+                }
+                
+                if (!consumption || parseFloat(consumption) <= 0) {
+                    alert('Please enter a valid consumption value');
+                    return;
+                }
+                
+                if (!amount || parseFloat(amount) <= 0) {
+                    alert('Please enter a valid amount');
+                    return;
+                }
+                
+                // Initialize segments array if needed
+                if (!app.billSegments) app.billSegments = [];
+                
+                // Just add the segment to the UI directly - don't save to DB yet
+                app.addSegmentToUI(name, amount, consumption, status, remarks);
+            },
+
             addSegmentToUI(name, amount, consumption, status, remarks) {
                 // Add to segments array
                 const segmentIndex = app.billSegments.length;
@@ -1772,6 +1818,12 @@ if ($action) {
                 // Create and add row to table
                 const row = document.createElement('tr');
                 row.id = `segment-row-${segmentIndex}`;
+                row.setAttribute('data-segment', '1');
+                row.setAttribute('data-name', name);
+                row.setAttribute('data-consumption', consumption);
+                row.setAttribute('data-amount', amount);
+                row.setAttribute('data-status', status);
+                row.setAttribute('data-remarks', remarks || '');
                 row.style.borderBottom = '1px solid #e5e7eb';
                 row.innerHTML = `
                     <td style="padding: 1rem; border-right: 1px solid #e5e7eb; text-align: center;">
@@ -1926,10 +1978,25 @@ if ($action) {
                     return;
                 }
                 
-                if (!app.billSegments || app.billSegments.length === 0) {
+                // Read segments directly from the table rows
+                const tableRows = document.querySelectorAll('#billSegmentsTableBody tr[data-segment]');
+                
+                if (!tableRows || tableRows.length === 0) {
                     alert('Please add at least one bill segment');
                     return;
                 }
+                
+                // Build segments array from table data
+                app.billSegments = [];
+                tableRows.forEach(row => {
+                    const name = row.getAttribute('data-name');
+                    const consumption = parseFloat(row.getAttribute('data-consumption'));
+                    const amount = parseFloat(row.getAttribute('data-amount'));
+                    const status = row.getAttribute('data-status');
+                    const remarks = row.getAttribute('data-remarks') || '';
+                    
+                    app.billSegments.push({name, consumption, amount, status, remarks});
+                });
                 
                 const total = app.billSegments.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
                 
@@ -1969,14 +2036,21 @@ if ($action) {
                             
                             setTimeout(() => msgDiv.remove(), 5000);
                             
-                            // Update segment statuses to pending_review WITHOUT clearing
-                            const rows = document.querySelectorAll('#billSegmentsTableBody tr');
-                            rows.forEach(row => {
-                                const statusCell = row.querySelector('td:nth-child(4)');
-                                if (statusCell) {
-                                    statusCell.innerHTML = '<span style="background-color: #60A5FA; color: white; padding: 4px 8px; border-radius: 4px;">pending_review</span>';
-                                }
-                            });
+                            // Only update the status of SELECTED segments to pending_review
+                            // Get only the rows that were checked (selected)
+                            const tbody = document.getElementById('billSegmentsTableBody');
+                            if (tbody) {
+                                const checkboxes = tbody.querySelectorAll('input[type="checkbox"]:checked');
+                                checkboxes.forEach(checkbox => {
+                                    const row = checkbox.closest('tr');
+                                    if (row) {
+                                        const statusCell = row.querySelector('td:nth-child(5)');
+                                        if (statusCell) {
+                                            statusCell.innerHTML = '<span style="background-color: #60A5FA; color: white; padding: 4px 8px; border-radius: 4px;">pending_review</span>';
+                                        }
+                                    }
+                                });
+                            }
                             
                             // Keep everything else visible - DON'T clear the form
                         } else {
