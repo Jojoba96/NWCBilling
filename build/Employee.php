@@ -1535,40 +1535,139 @@ if ($action) {
                 }
             },
 
-            calculateSegmentAmount() {
-                const segmentName = document.getElementById('formSegmentName').value;
+            calculateAutoSegments() {
                 const consumption = parseFloat(document.getElementById('formSegmentConsumption').value) || 0;
                 
-                if (!segmentName || consumption <= 0) {
-                    document.getElementById('formSegmentAmount').value = '';
+                if (consumption <= 0) {
+                    document.getElementById('formSegmentAmountWater').value = '0.00';
+                    document.getElementById('formSegmentAmountSewage').value = '0.00';
                     return;
                 }
                 
-                // Fetch calculated amount from backend
-                const params = new URLSearchParams({
+                // Calculate both Water Supply and Sewage amounts
+                const params1 = new URLSearchParams({
                     action: 'calculate_segment_amount',
-                    segmentName: segmentName,
+                    segmentName: 'Water Supply',
                     consumption: consumption
                 });
                 
-                fetch('/NWCBilling/build/Employee.php?' + params.toString())
+                const params2 = new URLSearchParams({
+                    action: 'calculate_segment_amount',
+                    segmentName: 'Sewage',
+                    consumption: consumption
+                });
+                
+                // Fetch water supply amount
+                fetch('/NWCBilling/build/Employee.php?' + params1.toString())
                     .then(response => response.text())
                     .then(text => {
                         try {
                             const data = JSON.parse(text);
-                            if (data.error) {
-                                console.error('Error:', data.error);
-                                return;
+                            if (!data.error) {
+                                document.getElementById('formSegmentAmountWater').value = parseFloat(data.amount).toFixed(2);
                             }
-                            // Display calculated amount
-                            document.getElementById('formSegmentAmount').value = parseFloat(data.amount).toFixed(2);
                         } catch (e) {
                             console.error('Parse error:', e);
                         }
                     })
-                    .catch(error => {
-                        console.error('Calculation error:', error);
+                    .catch(error => console.error('Calculation error:', error));
+                
+                // Fetch sewage amount
+                fetch('/NWCBilling/build/Employee.php?' + params2.toString())
+                    .then(response => response.text())
+                    .then(text => {
+                        try {
+                            const data = JSON.parse(text);
+                            if (!data.error) {
+                                document.getElementById('formSegmentAmountSewage').value = parseFloat(data.amount).toFixed(2);
+                            }
+                        } catch (e) {
+                            console.error('Parse error:', e);
+                        }
+                    })
+                    .catch(error => console.error('Calculation error:', error));
+            },
+
+            addAutoSegmentsFromForm() {
+                // Validate customer info
+                const accountId = document.getElementById('billAccountId').value;
+                const customerName = document.getElementById('billCustomerName') ? document.getElementById('billCustomerName').value : '';
+                const customerPhone = document.getElementById('billCustomerPhone') ? document.getElementById('billCustomerPhone').value : '';
+                
+                if (!accountId && !customerName && !customerPhone) {
+                    alert('Please enter either:\n- Account ID\n- Customer Name\n- Phone Number\n\nbefore adding segments');
+                    return;
+                }
+                
+                const consumption = parseFloat(document.getElementById('formSegmentConsumption').value) || 0;
+                const waterAmount = parseFloat(document.getElementById('formSegmentAmountWater').value) || 0;
+                const sewageAmount = parseFloat(document.getElementById('formSegmentAmountSewage').value) || 0;
+                const remarks = document.getElementById('formSegmentRemarks').value;
+                
+                // Validate consumption
+                if (consumption <= 0) {
+                    alert('Please enter a valid consumption value (greater than 0)');
+                    return;
+                }
+                
+                // Validate amounts were calculated
+                if (waterAmount <= 0 || sewageAmount <= 0) {
+                    alert('Please make sure amounts are calculated before adding segments. Try entering consumption again.');
+                    return;
+                }
+                
+                // Initialize segments array if needed
+                if (!app.billSegments) app.billSegments = [];
+                
+                // Create draft bill if this is the first segment
+                if (app.billSegments.length === 0) {
+                    const billDate = document.getElementById('billDate').value;
+                    const dueDate = document.getElementById('billDueDate').value;
+                    const totalAmount = waterAmount + sewageAmount;
+                    
+                    const billData = new URLSearchParams({
+                        action: 'save_bill_draft',
+                        accountId: accountId,
+                        billDate: billDate,
+                        dueDate: dueDate,
+                        totalAmount: totalAmount
                     });
+                    
+                    fetch('/NWCBilling/build/Employee.php', {
+                        method: 'POST',
+                        body: billData
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (!data.success) {
+                                alert('Error creating draft bill: ' + (data.error || 'Unknown error'));
+                                return;
+                            }
+                            
+                            app.currentBillId = data.id;
+                            // Add both segments
+                            app.addSegmentToDB('Water Supply', consumption, 'draft', remarks);
+                            app.addSegmentToDB('Sewage', consumption, 'draft', remarks);
+                            // Clear form
+                            app.clearSegmentForm();
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error creating draft bill');
+                        });
+                } else {
+                    // Bill exists, add both segments
+                    app.addSegmentToDB('Water Supply', consumption, 'draft', remarks);
+                    app.addSegmentToDB('Sewage', consumption, 'draft', remarks);
+                    app.clearSegmentForm();
+                }
+            },
+            
+            clearSegmentForm() {
+                document.getElementById('formSegmentConsumption').value = '';
+                document.getElementById('formSegmentAmountWater').value = '0.00';
+                document.getElementById('formSegmentAmountSewage').value = '0.00';
+                document.getElementById('formSegmentRemarks').value = '';
             },
 
             displayLoadedSegments(data) {
@@ -1613,82 +1712,6 @@ if ($action) {
                 }
             },
 
-            addBillSegmentFromForm() {
-                // Validate that customer info is provided
-                const accountId = document.getElementById('billAccountId').value;
-                const customerName = document.getElementById('billCustomerName') ? document.getElementById('billCustomerName').value : '';
-                const customerPhone = document.getElementById('billCustomerPhone') ? document.getElementById('billCustomerPhone').value : '';
-                
-                if (!accountId && !customerName && !customerPhone) {
-                    alert('Please enter either:\n- Account ID\n- Customer Name\n- Phone Number\n\nbefore adding segments');
-                    return;
-                }
-                
-                // Get form values
-                const name = document.getElementById('formSegmentName').value;
-                const consumption = document.getElementById('formSegmentConsumption').value;
-                const amount = document.getElementById('formSegmentAmount').value;
-                const status = document.getElementById('formSegmentStatus').value;
-                const remarks = document.getElementById('formSegmentRemarks').value;
-                
-                // Validate
-                if (!name) {
-                    alert('Please select a segment type');
-                    return;
-                }
-                
-                if (!consumption || parseFloat(consumption) <= 0) {
-                    alert('Please enter a valid consumption value');
-                    return;
-                }
-                
-                if (!amount || parseFloat(amount) <= 0) {
-                    alert('Please enter a valid amount');
-                    return;
-                }
-                
-                // Initialize segments array if needed
-                if (!app.billSegments) app.billSegments = [];
-                
-                // If this is the first segment, create a draft bill first
-                if (app.billSegments.length === 0) {
-                    const billDate = document.getElementById('billDate').value;
-                    const dueDate = document.getElementById('billDueDate').value;
-                    const total = parseFloat(amount);
-                    
-                    const billData = new URLSearchParams({
-                        action: 'save_bill_draft',
-                        accountId: accountId,
-                        billDate: billDate,
-                        dueDate: dueDate,
-                        totalAmount: total
-                    });
-                    
-                    fetch('/NWCBilling/build/Employee.php', {
-                        method: 'POST',
-                        body: billData
-                    })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (!data.success) {
-                                alert('Error creating draft bill: ' + (data.error || 'Unknown error'));
-                                return;
-                            }
-                            
-                            // Store bill ID for future segment saves
-                            app.currentBillId = data.id;
-                            app.addSegmentToDB(name, consumption, status, remarks);
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            alert('Error creating draft bill');
-                        });
-                } else {
-                    // Bill already exists, just add segment
-                    app.addSegmentToDB(name, consumption, status, remarks);
-                }
-            },
-
             addSegmentToDB(name, consumption, status, remarks) {
                 const billId = app.currentBillId;
                 
@@ -1713,17 +1736,16 @@ if ($action) {
                     .then(response => response.json())
                     .then(data => {
                         if (!data.success) {
-                            alert('Error saving segment: ' + (data.error || 'Unknown error'));
+                            console.error('Error saving segment:', data.error);
+                            // Don't alert here - let the second segment complete first
                             return;
                         }
                         
-                        // Use calculated amount from server
                         const calculatedAmount = data.calculatedAmount || consumption;
                         app.addSegmentToUI(name, calculatedAmount, consumption, status, remarks);
                     })
                     .catch(error => {
                         console.error('Error:', error);
-                        alert('Error saving segment');
                     });
             },
 
@@ -2346,39 +2368,28 @@ if ($action) {
 
             <!-- Bill Segments Form Section -->
             <div class="mb-6">
-                <h6 class="text-sm font-bold text-slate-700 dark:text-white mb-4">Add Bill Segment</h6>
+                <h6 class="text-sm font-bold text-slate-700 dark:text-white mb-4">Add Water Consumption (Auto-creates Water Supply & Sewage)</h6>
                 
                 <div style="border: 1px solid #d1d5db; border-radius: 0.75rem; padding: 1.5rem; background-color: #f9fafb;">
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Bill Segment</label>
-                            <select id="formSegmentName" onchange="app.calculateSegmentAmount()" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; dark:bg-slate-800 dark:text-white;">
-                                <option value="">-- Select Segment --</option>
-                                <option value="Water Supply">Water Supply</option>
-                                <option value="Sewage">Sewage</option>
-                            </select>
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Water Consumption (m³)</label>
+                            <input type="number" id="formSegmentConsumption" placeholder="Enter consumption..." value="" step="0.01" onchange="app.calculateAutoSegments()" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; dark:bg-slate-800 dark:text-white;">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Consumption (m³)</label>
-                            <input type="number" id="formSegmentConsumption" placeholder="0.00" value="0" step="0.01" onchange="app.calculateSegmentAmount()" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; dark:bg-slate-800 dark:text-white;">
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Water Supply Amount (SAR)</label>
+                            <input type="number" id="formSegmentAmountWater" placeholder="Auto-calculated" value="0" step="0.01" readonly style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; dark:bg-slate-800 dark:text-white; background-color: #f3f4f6;">
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Bill Amount (SAR)</label>
-                            <input type="number" id="formSegmentAmount" placeholder="0.00" value="0" step="0.01" readonly style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; dark:bg-slate-800 dark:text-white; background-color: #f3f4f6;">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Status</label>
-                            <select id="formSegmentStatus" style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; dark:bg-slate-800 dark:text-white;">
-                                <option value="draft">Draft</option>
-                                <option value="pending_review">Pending Review</option>
-                            </select>
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Sewage Amount (SAR)</label>
+                            <input type="number" id="formSegmentAmountSewage" placeholder="Auto-calculated" value="0" step="0.01" readonly style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; dark:bg-slate-800 dark:text-white; background-color: #f3f4f6;">
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">Remarks</label>
                             <input type="text" id="formSegmentRemarks" placeholder="Notes..." style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; dark:bg-slate-800 dark:text-white;">
                         </div>
                     </div>
-                    <button onclick="app.addBillSegmentFromForm()" class="inline-flex items-center px-4 py-2 font-bold text-white uppercase bg-blue-500 border-0 rounded-lg text-xs hover:bg-blue-600">+ Add Segment</button>
+                    <button onclick="app.addAutoSegmentsFromForm()" class="inline-flex items-center px-4 py-2 font-bold text-white uppercase bg-blue-500 border-0 rounded-lg text-xs hover:bg-blue-600">+ Add Water & Sewage</button>
                 </div>
             </div>
 
@@ -2606,6 +2617,21 @@ if ($action) {
                 if (modal) {
                     modal.style.display = 'none';
                 }
+            }
+        });
+        
+        // Safe initialization for PerfectScrollbar and other libraries
+        window.addEventListener('load', function() {
+            try {
+                // Initialize PerfectScrollbar if available
+                if (typeof PerfectScrollbar !== 'undefined') {
+                    const sidenav = document.querySelector('[sidenav-main]');
+                    if (sidenav) {
+                        new PerfectScrollbar(sidenav);
+                    }
+                }
+            } catch (e) {
+                console.log('PerfectScrollbar initialization skipped:', e.message);
             }
         });
     </script>
